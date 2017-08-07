@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import subprocess
+from datetime import datetime
 import shlex
 import argparse
 import timeit
@@ -88,7 +89,7 @@ class Loader():
     @classmethod
     def obj_field(cls, path, fname,
                   row_header=0,
-                  sel_col = ["ra","dec","eventnum_runnum","date","time_ut"]):
+                  sel_col=["ra","dec","eventnum_runnum","date","time_ut"]):
         """Method to open the tables containing RA,DEC,EXPNUM from the list
         of objects and return a list of pandas tables. Note that inputs
         tables must have a capitalized header with RA, DEC, and EXPNUM on it
@@ -103,9 +104,14 @@ class Loader():
         tablst = []
         for fi in fname:
             aux_fn = os.path.join(path,fi)
-            tmp = pd.read_table(fnm1, header=row_header, 
+            tmp = pd.read_table(aux_fn, header=row_header, 
                                 usecols=lambda x: x.lower() in sel_col, 
                                 sep="\s+", engine="python")
+            # uppercase column names
+            tmp.columns = map(str.upper, tmp.columns)
+            # Change date format from YY/MM/DD to YYYY-MM-DD
+            D = lambda x: datetime.strptime(x, "%y/%m/%d").strftime("%Y-%m-%d")
+            tmp["DATE"] =  map(D, tmp["DATE"])
             # Test if all columns were read
             if tmp.columns.values.shape[0] != len(sel_col):
                 msg = "Read columns: {0}".format(", ".join(tmp.columns.values))
@@ -113,12 +119,12 @@ class Loader():
                 msg += "({0})".format(", ".join(sel_col))
                 logging.error(msg)
                 exit(1)
-            tmp.columns = map(str.lower, df1.columns)
             tablst.append(tmp)
         return tablst
 
 
 class JSON():
+    # Not yet accommodated to ICECUBE 
     def __init__(self,
                 count=1,
                 note="Added to queue by user, not obstac",
@@ -416,7 +422,8 @@ class Schedule():
                     max_airm=None,
                     count=None,seqid_LIGO=None,propid=None,exptype=None,
                     progr=None,band=None,exptime=None,til_id=None,
-                    comment=None,note=None,towait=None,unique_band=None):
+                    comment=None,note=None,towait=None,unique_band=None,
+                    ice_name=None):
         """Method to wrap different methods, to calculate objects observability
         for a single night
 
@@ -484,9 +491,12 @@ class Schedule():
         radec = Loader.obj_field(path_tab,object_list)
         sel = []
         for df in radec:
-            #get the object names from desoper DB
-            dbinfo = Toolbox.dbquery_ea(list(df["EXPNUM"].values),band=band,
-                                    unique_band=unique_band)
+            #
+            # For testing avoid to get the field name form DB
+            if False:
+                #get the object names from desoper DB
+                dbinfo = Toolbox.dbquery_ea(list(df["EXPNUM"].values),band=band,
+                                        unique_band=unique_band)
             for index,row in df.iterrows():
                 for idx0,tRA in enumerate(time_RA):
                     low_RA = tRA[1] - func_dec[idx0](row["DEC"])
@@ -500,11 +510,14 @@ class Schedule():
                         cond5 = np.less_equal(secz,max_airm)
                         cond6 = np.greater_equal(secz,1.)
                         if cond5 and cond6:
-                            dfaux = dbinfo.loc[dbinfo["EXPNUM"]==row["EXPNUM"]]
+                            # Avoiding dfaux for Icecube test
+                            # dfaux = dbinfo.loc[dbinfo["EXPNUM"]==row["EXPNUM"]]
                             z_tmp = math.degrees(math.acos(1/np.float(secz)))
                             tmp = (index+1,row["RA"],row["DEC"],alt,az)
                             tmp += (z_tmp,secz,tRA[0][0]-deltaUTC)
-                            tmp += (dfaux["OBJECT"].values[0],)
+                            # Avoiding use dfaux for Icecube testing
+                            # tmp += (dfaux["OBJECT"].values[0],)
+                            tmp += (ice_name,)
                             sel.append(tmp)
         #if no object meets observability criteria
         if len(sel) == 0:
@@ -513,6 +526,7 @@ class Schedule():
             logging.error(err_mssg)
         else:
             #create a pandas DataFrame or structured array for easier selection
+            # 
             cols = ["n_id","ra","dec","alt","az","z","secz","local_time","obj"]
             sel_df = pd.DataFrame(sel,columns=cols)
             min_df = pd.DataFrame()
@@ -526,28 +540,31 @@ class Schedule():
             min_df = min_df.reset_index()
             #write out the resume table
             min_df.to_csv(fname_csv,sep=",",index=False,header=True)
+            #
+            # JSON write out will not be called
             #write json file for this night
-            fjson = open(fname_json,"w")
-            for index,row in min_df.iterrows():
-                jw = dict()
-                jw["count"] = count
-                jw["seqid_LIGO"] = seqid_LIGO
-                jw["propid"] = propid
-                jw["exptype"] = exptype
-                jw["progr"] = progr
-                jw["band"] = band
-                jw["exptime"] = exptime
-                jw["til_id"] = til_id
-                jw["comment"] = comment
-                jw["note"] = note
-                jw["towait"] = towait
-                jw["seqtot"] = len(min_df.index)
-                jw["seqnum"] = index + 1
-                jw["objectname"] = row["obj"]
-                jw["ra"] = row["ra"]
-                jw["dec"] = row["dec"]
-                JSON(**jw).write_out(fjson,index,len(min_df.index)-1)
-            fjson.close()
+            if False:
+                fjson = open(fname_json,"w")
+                for index,row in min_df.iterrows():
+                    jw = dict()
+                    jw["count"] = count
+                    jw["seqid_LIGO"] = seqid_LIGO
+                    jw["propid"] = propid
+                    jw["exptype"] = exptype
+                    jw["progr"] = progr
+                    jw["band"] = band
+                    jw["exptime"] = exptime
+                    jw["til_id"] = til_id
+                    jw["comment"] = comment
+                    jw["note"] = note
+                    jw["towait"] = towait
+                    jw["seqtot"] = len(min_df.index)
+                    jw["seqnum"] = index + 1
+                    jw["objectname"] = row["obj"]
+                    jw["ra"] = row["ra"]
+                    jw["dec"] = row["dec"]
+                    JSON(**jw).write_out(fjson,index,len(min_df.index)-1)
+                fjson.close()
 
     @classmethod
     def point_allnight(cls,
@@ -574,15 +591,20 @@ class Schedule():
             logging.warning("\t(!) No value has been entered for Proposal ID")
         if unique_band is None:
             unique_band = False
+        # For the first test with Icecube, I'll use the date on the input table
+        # date_fn = os.path.join(path_tab,date_tab)
+        # wd = pd.read_table(date_fn,sep="\s+",names=["date","part"],
+        #                header=None,engine="python",comment="#")
+        wd = Loader.obj_field(path_tab, object_list)
         #
-        date_fn = os.path.join(path_tab,date_tab)
-        wd = pd.read_table(date_fn,sep="\s+",names=["date","part"],
-                        header=None,engine="python",comment="#")
-        #
-        for idx,row in wd.iterrows():
+        # For Icecube testing
+        # Lets take only the first element
+        for idx,row in wd[0].iterrows():
             print "Working on night: {0}/{1} ".format(*row)
             t0 = time.time()
-            out_aux = row["date"][5:].replace("-","_")
+            #
+            # For Icecube testing note the lower or upper case
+            out_aux = row["DATE"][5:].replace("-","_")
             #csv resume table filename
             out_csv = "{0}_{1}.csv".format(root_csv,out_aux)
             out_csv = os.path.join(path_out,out_csv)
@@ -596,8 +618,10 @@ class Schedule():
             kw["fname_json"] = out_json
             kw["object_list"] = object_list
             kw["utc_minus_local"] = utc_minus_local
-            kw["begin_day"] = row["date"]
-            kw["obs_interval"] = row["part"]
+            kw["begin_day"] = row["DATE"]
+            # For testing in Icecube, I'll assume "full" night
+            # kw["obs_interval"] = row["part"]
+            kw["obs_interval"] = "full"
             kw["T_step"] = T_step
             kw["max_airm"] = max_airm
             kw["count"] = count
@@ -612,13 +636,17 @@ class Schedule():
             kw["note"] = note
             kw["towait"] = towait
             kw["unique_band"] = unique_band
+            # 
+            # For Icecube testing
+            ice_name = "EventNum_RunNum".upper()
+            kw["ice_name"] = row[ice_name]
             Schedule.point_onenight(**kw)
             t1 = time.time()
             print "Elapsed time: {0:.2f} minutes".format((t1-t0)/60.)
 
 
 if __name__ == "__main__":
-    print "\tRunning script: {0}\n\t{1}".format(__file__,"="*30)
+    print "\tRunning script: {0}\n\t{1}".format(__file__,"="*38)
 
     """Fill up the different arguments from the command line call
     """
