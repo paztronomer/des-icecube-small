@@ -1,5 +1,8 @@
 """Francisco Paz-Chinchon, University of Illinois/NCSA
-DES Collaboration"""
+DES Collaboration
+
+Modified from by BLISS code to account for the ICECUBE needs
+"""
 import os
 import sys
 import time
@@ -17,47 +20,11 @@ import astropy.time as apy_time
 import scipy.signal as signal #v0.19
 import scipy.interpolate as interpolate
 import logging
-import easyaccess as ea
 
 
 class Toolbox():
     @classmethod
-    def dbquery_ea(cls,expnum_list,band=None,unique_band=False):
-        if len(expnum_list) == 1:
-            expnum_aux = expnum_list[0]
-        elif len(expnum_list) > 1:
-            expnum_aux = ",".join(map(str,expnum_list))
-        else:
-            logging.error("EXPNUM list has zero entries")
-            exit(1)
-        connect = ea.connect("desoper")
-        cursor = connect.cursor()
-        if unique_band:
-            qaux = " and band='{0}'".format(band)
-        else:
-            qaux = ""
-        q = "select expnum,radeg,decdeg,object,band from exposure"
-        q += " where expnum in ({0})".format(expnum_aux)
-        q += qaux
-        q += " order by expnum"
-        #df_obj = cursor.execute(q)
-        df_obj = connect.query_to_pandas(q)
-        connect.close()
-        if (len(df_obj.index) == 0):
-            logging.error("\nNo entries in the DB for the inputs EXPNUM")
-            exit(1)
-        elif (np.unique(df_obj["BAND"].values).shape[0] > 1):
-            logging.warning("\nEXPNUMs from different bands")
-            print "Bands: {0}".format(np.unique(df_obj["BAND"].values))
-        #for unique band, must stopt the code if not matches criteria
-        if unique_band and (len(df_obj.index) != len(expnum_list)):
-            logging.error("\nMultiple bands for the input EXPNUMs")
-            print "Bands: {0}".format(np.unique(df_obj["BAND"].values))
-            exit(1)
-        return df_obj
-
-    @classmethod
-    def lsq_interp(cls,x,y,degree=4):
+    def lsq_interp(cls, x, y, degree=4, fraction_n=0.1):
         """Caller fot the scipy least squares method interpolator
         To call scipy.interpolate_make_lsq_spline():
         - x: abcissas
@@ -71,6 +38,8 @@ class Toolbox():
         Inputs
         - x,y: one dimensional arrays
         - degree: integer, defines the polynomial fitting
+        - fraction_n: number of points to be used, a fraction of the total
+        number of points
         Returns
         - object, the interpolator
 
@@ -80,16 +49,18 @@ class Toolbox():
         t[j] < x[j] < t[j+k+1], for j=0,1..n-k-2
         (*) degree 4 works slightly better than lower values
         """
-        naux = np.int(np.ceil(x.shape[0]*0.1))
-        #by hand I set the use of all but 2 points at the ends
-        p1,p2 = 2,x.shape[0]-3
-        t = x[p1:p2:naux]
-        t = np.r_[(x[0],)*(degree+1),t,(x[-1],)*(degree+1)]
-        lsq_spline = interpolate.make_lsq_spline(x,y,t,degree)
+        # Number of points to be used
+        naux = np.int(np.ceil(x.shape[0] * fraction_n))
+        # By hand I set the use of all but 2 points at each end of the sample
+        p1, p2 = 2, x.shape[0] - 3
+        t = x[p1 : p2 : naux]
+        t = np.r_[(x[0],) * (degree + 1), t, (x[-1],) * (degree + 1)]
+        # Interpolate with the subset of points
+        lsq_spline = interpolate.make_lsq_spline(x, y, t, degree)
         return lsq_spline
 
     @classmethod
-    def delta_hr(cls,time_arr):
+    def delta_hr(cls, time_arr):
         """Method to return a round amount of hours for a astropy TimeDelta
         object, calculated from the peak-to-peak value given an astropy
         Time array
@@ -98,10 +69,11 @@ class Toolbox():
         Returns
         - N: integer representing the round value of the number of hours the
         time interval contains.
-        - M: integer representing the rounf dumber of minutes the interval contains
+        - M: integer representing the rounf dumber of minutes the interval 
+        contains
         """
-        N = np.round(time_arr.ptp().sec/3600.).astype(int)
-        M = np.round(time_arr.ptp().sec/60.).astype(int)
+        N = np.round(time_arr.ptp().sec / 3600.).astype(int)
+        M = np.round(time_arr.ptp().sec / 60.).astype(int)
         if (np.abs(N) < 1) and (np.abs(N) >= 0):
             logging.warning("Observing window is smaller than 1 hour")
         elif N > 24:
@@ -114,21 +86,34 @@ class Toolbox():
 
 class Loader():
     @classmethod
-    def obj_field(cls,path,fname):
+    def obj_field(cls, path, fname,
+                  row_header=0,
+                  sel_col = ["ra","dec","eventnum_runnum","date","time_ut"]):
         """Method to open the tables containing RA,DEC,EXPNUM from the list
         of objects and return a list of pandas tables. Note that inputs
         tables must have a capitalized header with RA, DEC, and EXPNUM on it
         Inputs
         - path: string containing parent path to the tables.
         - fname: list of strings, containing the filenames of the object tables
+        - row_header: row from which extract the column names
+        - sel_col: list of columns to be read
         Returns
         - list of pandas objects, being the loaded RA DEC tables
         """
         tablst = []
         for fi in fname:
             aux_fn = os.path.join(path,fi)
-            tmp = pd.read_table(aux_fn,sep="\s+",usecols=["RA","DEC","EXPNUM"],
-                            engine="python",comment="#")
+            tmp = pd.read_table(fnm1, header=row_header, 
+                                usecols=lambda x: x.lower() in sel_col, 
+                                sep="\s+", engine="python")
+            # Test if all columns were read
+            if tmp.columns.values.shape[0] != len(sel_col):
+                msg = "Read columns: {0}".format(", ".join(tmp.columns.values))
+                msg += "\ndoesn't match the expected"
+                msg += "({0})".format(", ".join(sel_col))
+                logging.error(msg)
+                exit(1)
+            tmp.columns = map(str.lower, df1.columns)
             tablst.append(tmp)
         return tablst
 
