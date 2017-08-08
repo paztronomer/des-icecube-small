@@ -606,13 +606,21 @@ class Schedule():
             # For Icecube testing note the lower or upper case
             out_aux = row["DATE"][5:].replace("-","_")
             #csv resume table filename
-            out_csv = "{0}_{1}.csv".format(root_csv,out_aux)
-            out_csv = os.path.join(path_out,out_csv)
+            # Changed for Icecube 
+            # out_csv = "{0}_{1}.csv".format(root_csv,out_aux)
+            # out_csv = os.path.join(path_out,out_csv)
             #json file filename
             out_json = "{0}_{1}.json".format(root_json,out_aux)
             out_json = os.path.join(path_out,out_json)
             #arguments for night to night call
             kw = dict()
+            # 
+            # For Icecube testing
+            ice_name = "EventNum_RunNum".upper()
+            kw["ice_name"] = row[ice_name]
+            out_csv = "{0}_{1}_{2}.csv".format(root_csv,out_aux,row[ice_name])
+            out_csv = os.path.join(path_out,out_csv)
+            #
             kw["path_tab"] = path_tab
             kw["fname_csv"] = out_csv
             kw["fname_json"] = out_json
@@ -636,10 +644,6 @@ class Schedule():
             kw["note"] = note
             kw["towait"] = towait
             kw["unique_band"] = unique_band
-            # 
-            # For Icecube testing
-            ice_name = "EventNum_RunNum".upper()
-            kw["ice_name"] = row[ice_name]
             Schedule.point_onenight(**kw)
             t1 = time.time()
             print "Elapsed time: {0:.2f} minutes".format((t1-t0)/60.)
