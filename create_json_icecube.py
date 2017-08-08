@@ -517,11 +517,11 @@ class Schedule():
                             tmp += (z_tmp,secz,tRA[0][0]-deltaUTC)
                             #
                             # NOTE: due to a truncation, tRA[0][0] appears
-                            # as being the same value 
+                            # as being the same value
                             #
                             # Avoiding use dfaux for Icecube testing
                             # tmp += (dfaux["OBJECT"].values[0],)
-                            tmp += (ice_name,)
+                            tmp += (row["EVENTNUM_RUNNUM"],)
                             sel.append(tmp)
         #if no object meets observability criteria
         if len(sel) == 0:
@@ -599,11 +599,12 @@ class Schedule():
         # date_fn = os.path.join(path_tab,date_tab)
         # wd = pd.read_table(date_fn,sep="\s+",names=["date","part"],
         #                header=None,engine="python",comment="#")
-        wd = Loader.obj_field(path_tab, object_list)
+        wd = Loader.obj_field(path_tab, object_list)[0]
+        print wd
         #
         # For Icecube testing
         # Lets take only the first element
-        for idx,row in wd[0].iterrows():
+        for idx,row in wd.iterrows():
             print "Working on night: {0}/{1} ".format(*row)
             t0 = time.time()
             #
@@ -620,9 +621,9 @@ class Schedule():
             kw = dict()
             #
             # For Icecube testing
-            ice_name = "EventNum_RunNum".upper()
-            kw["ice_name"] = row[ice_name]
-            out_csv = "{0}_{1}_{2}.csv".format(root_csv,out_aux,row[ice_name])
+            # ice_name = "EventNum_RunNum".upper()
+            # kw["ice_name"] = row[ice_name]
+            out_csv = "{0}_{1}.csv".format(root_csv,out_aux)
             out_csv = os.path.join(path_out,out_csv)
             #
             kw["path_tab"] = path_tab
