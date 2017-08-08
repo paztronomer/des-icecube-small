@@ -70,7 +70,7 @@ class Toolbox():
         Returns
         - N: integer representing the round value of the number of hours the
         time interval contains.
-        - M: integer representing the rounf dumber of minutes the interval 
+        - M: integer representing the rounf dumber of minutes the interval
         contains
         """
         N = np.round(time_arr.ptp().sec / 3600.).astype(int)
@@ -104,8 +104,8 @@ class Loader():
         tablst = []
         for fi in fname:
             aux_fn = os.path.join(path,fi)
-            tmp = pd.read_table(aux_fn, header=row_header, 
-                                usecols=lambda x: x.lower() in sel_col, 
+            tmp = pd.read_table(aux_fn, header=row_header,
+                                usecols=lambda x: x.lower() in sel_col,
                                 sep="\s+", engine="python")
             # uppercase column names
             tmp.columns = map(str.upper, tmp.columns)
@@ -124,7 +124,7 @@ class Loader():
 
 
 class JSON():
-    # Not yet accommodated to ICECUBE 
+    # Not yet accommodated to ICECUBE
     def __init__(self,
                 count=1,
                 note="Added to queue by user, not obstac",
@@ -515,6 +515,10 @@ class Schedule():
                             z_tmp = math.degrees(math.acos(1/np.float(secz)))
                             tmp = (index+1,row["RA"],row["DEC"],alt,az)
                             tmp += (z_tmp,secz,tRA[0][0]-deltaUTC)
+                            #
+                            # NOTE: due to a truncation, tRA[0][0] appears
+                            # as being the same value 
+                            #
                             # Avoiding use dfaux for Icecube testing
                             # tmp += (dfaux["OBJECT"].values[0],)
                             tmp += (ice_name,)
@@ -526,7 +530,7 @@ class Schedule():
             logging.error(err_mssg)
         else:
             #create a pandas DataFrame or structured array for easier selection
-            # 
+            #
             cols = ["n_id","ra","dec","alt","az","z","secz","local_time","obj"]
             sel_df = pd.DataFrame(sel,columns=cols)
             min_df = pd.DataFrame()
@@ -606,7 +610,7 @@ class Schedule():
             # For Icecube testing note the lower or upper case
             out_aux = row["DATE"][5:].replace("-","_")
             #csv resume table filename
-            # Changed for Icecube 
+            # Changed for Icecube
             # out_csv = "{0}_{1}.csv".format(root_csv,out_aux)
             # out_csv = os.path.join(path_out,out_csv)
             #json file filename
@@ -614,7 +618,7 @@ class Schedule():
             out_json = os.path.join(path_out,out_json)
             #arguments for night to night call
             kw = dict()
-            # 
+            #
             # For Icecube testing
             ice_name = "EventNum_RunNum".upper()
             kw["ice_name"] = row[ice_name]
